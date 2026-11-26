@@ -237,9 +237,16 @@ final class PxcConnection: @unchecked Sendable {
         case 0x80000010:
             // 仪表表示"某项控制消息不支持"，属通知，不回。
             log("\(dashboard) 仪表报告不支持某项控制消息")
+        case 0x20021, 0x20031, 0x204c1, 0x20491, 0x20051, 0x20591, 0x205a1, 0x70000001:
+            // 台铃实现里同样只收不回，回应会形成往返循环。
+            break
         default:
-            log(String(format: "\(dashboard) 控制通道未命名命令 0x%08x（%d 字节）",
+            // 其余控制命令一律回 +1（空 payload）。
+            // NWF125 会额外下发 0x104a0 / 0x10430 等，缺应答后约 10 秒停止拉帧
+            // 并报「台铃等待超时：等待仪表逐帧拉取画面」。
+            log(String(format: "\(dashboard) 控制通道未命名命令 0x%08x（%d 字节），已回 +1",
                        request.command, request.payload.count))
+            try reply(socket, request.command, payload: Data())
         }
     }
 
