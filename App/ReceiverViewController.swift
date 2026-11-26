@@ -96,6 +96,20 @@ final class ReceiverViewController: UIViewController, CLLocationManagerDelegate 
     private let nwf125SizeControl = ChoiceMenu(items: CfmotoProfile.nwf125Caps.map { "\($0.width)×\($0.height)" })
     /// NWF125 专用：CarPlay 渲染尺寸（越大图标越小、越完整）。
     private let nwf125RenderControl = ChoiceMenu(items: CfmotoProfile.nwf125RenderSizes.map { "\($0.width)×\($0.height)" })
+    /// NWF125 专用：自定义尺寸（填了就优先于下拉，免重新编译）。
+    private let nwf125CapField = UITextField()
+    private let nwf125RenderField = UITextField()
+
+    /// 解析 "480x624" 这类输入；不合法返回 nil。
+    private func parseFrameSize(_ text: String?) -> InstrumentFrameSize? {
+        guard let raw = text?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        let parts = raw.lowercased().replacingOccurrences(of: "×", with: "x").split(separator: "x")
+        guard parts.count == 2,
+              let w = Int(parts[0].trimmingCharacters(in: .whitespaces)),
+              let h = Int(parts[1].trimmingCharacters(in: .whitespaces)),
+              w >= 64, h >= 64, w % 2 == 0, h % 2 == 0 else { return nil }
+        return InstrumentFrameSize(width: w, height: h)
+    }
     private let autoRestartSwitch = UISwitch()
     private let performanceControl = ChoiceMenu(items: BrowserPerformance.allCases.map(\.title))
     private let showTouchesSwitch = UISwitch()
@@ -185,9 +199,11 @@ final class ReceiverViewController: UIViewController, CLLocationManagerDelegate 
         case .nwf125:
             let caps = CfmotoProfile.nwf125Caps
             let capIndex = min(caps.count - 1, max(0, nwf125SizeControl.selectedSegmentIndex))
+            let cap = parseFrameSize(nwf125CapField.text) ?? caps[capIndex]
             let renders = CfmotoProfile.nwf125RenderSizes
             let renderIndex = min(renders.count - 1, max(0, nwf125RenderControl.selectedSegmentIndex))
-            return CfmotoProfile.nwf125(cap: caps[capIndex], render: renders[renderIndex])
+            let render = parseFrameSize(nwf125RenderField.text) ?? renders[renderIndex]
+            return CfmotoProfile.nwf125(cap: cap, render: render)
         default: return nil
         }
     }
@@ -887,6 +903,8 @@ final class ReceiverViewController: UIViewController, CLLocationManagerDelegate 
         defaults.set(ReceiverConfiguration.iconSizes[max(0, iconSizeControl.selectedSegmentIndex)].widthMM, forKey: "widthPhysicalMM")
         defaults.set(nwf125SizeControl.selectedSegmentIndex, forKey: "nwf125CapIndex")
         defaults.set(nwf125RenderControl.selectedSegmentIndex, forKey: "nwf125RenderIndex")
+        defaults.set(nwf125CapField.text ?? "", forKey: "nwf125CustomCap")
+        defaults.set(nwf125RenderField.text ?? "", forKey: "nwf125CustomRender")
         defaults.set(selectedPerformance.rawValue, forKey: "browserPerformance")
         defaults.set(autoRestartSwitch.isOn, forKey: "autoRestart")
         defaults.set(showTouchesSwitch.isOn, forKey: "showTouches")
@@ -2084,13 +2102,15 @@ extension ReceiverViewController {
             max(0, defaults.object(forKey: "nwf125CapIndex") as? Int ?? 0))
         nwf125RenderControl.selectedSegmentIndex = min(CfmotoProfile.nwf125RenderSizes.count - 1,
             max(0, defaults.object(forKey: "nwf125RenderIndex") as? Int ?? 0))
+        nwf125CapField.text = defaults.string(forKey: "nwf125CustomCap") ?? ""
+        nwf125RenderField.text = defaults.string(forKey: "nwf125CustomRender") ?? ""
         performanceControl.selectedSegmentIndex = BrowserPerformance.allCases.firstIndex(of:
             BrowserPerformance(rawValue: defaults.string(forKey: "browserPerformance") ?? "") ?? .auto) ?? 0
         autoRestartSwitch.isOn = defaults.object(forKey: "autoRestart") as? Bool ?? false
         showTouchesSwitch.isOn = defaults.bool(forKey: "showTouches")
         carButtonSwitch.isOn = defaults.object(forKey: "carButton") as? Bool ?? true
         let displayControls: [UIControl] = [resolutionControl, aspectRatioControl, sizeModeControl, frameRateControl, codecControl, iconSizeControl,
-                                            nwf125SizeControl, nwf125RenderControl,
+                                            nwf125SizeControl, nwf125RenderControl, nwf125CapField, nwf125RenderField,
                                             performanceControl, autoRestartSwitch, showTouchesSwitch, carButtonSwitch]
         displayControls.forEach { $0.addTarget(self, action: #selector(displaySettingChanged), for: .valueChanged) }
         appearanceControl.selectedSegmentIndex = defaults.integer(forKey: "carPlayAppearance")
@@ -2481,11 +2501,13 @@ extension ReceiverViewController {
                         SettingsSection(name, [.info(CWL("仪表画面"), "CarPlay \(cfmoto.width)×\(cfmoto.height) · 车机 \(cap.width)×\(cap.height) · H.264 · PXC(TCP) · \(cfmoto.fps) FPS")]),
                         SettingsSection(CWL("PXC 输出"), [
                             .control(CWL("车机回包尺寸"), icon: ("rectangle.expand.vertical", .systemTeal), nwf125SizeControl),
-                            .info(CWL("说明"), CWL("停止接收后修改生效；越大画面越满，超过车机上限会黑屏。"))
+                            .field(CWL("或自定义"), nwf125CapField, placeholder: "如 480x624"),
+                            .info(CWL("说明"), CWL("自定义优先于下拉；停止接收后修改生效。"))
                         ]),
                         SettingsSection(CWL("CarPlay 渲染"), [
                             .control(CWL("渲染尺寸"), icon: ("rectangle.on.rectangle", .systemIndigo), nwf125RenderControl),
-                            .info(CWL("说明"), CWL("越大 CarPlay 认为屏幕越大，图标越小越完整；仪表实际显示尺寸不受影响。"))
+                            .field(CWL("或自定义"), nwf125RenderField, placeholder: "如 640x854"),
+                            .info(CWL("说明"), CWL("越大 CarPlay 认为屏幕越大，图标越小；仪表实际显示尺寸不受影响。"))
                         ]),
                         SettingsSection(CWL("图标"), [.control(CWL("CarPlay 图标大小"), icon: ("square.grid.2x2.fill", .systemPurple), iconSizeControl)])
                     ]
