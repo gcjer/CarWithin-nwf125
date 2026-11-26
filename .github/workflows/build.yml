@@ -1,0 +1,38 @@
+name: build-ipa
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 生成 Xcode 工程
+        run: python3 Tools/generate_project.py
+
+      - name: 编译（未签名 arm64）
+        run: |
+          xcodebuild -project TDSCarKit.xcodeproj -scheme TDSCarKit \
+            -configuration Release -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            -derivedDataPath build/source | tail -40
+
+      - name: 打包 ipa
+        run: |
+          set -e
+          mkdir -p build/Payload
+          APP=$(find build/source/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -1)
+          echo "app: $APP"
+          cp -R "$APP" build/Payload/
+          cd build && zip -qry CarWithin-unsigned.ipa Payload
+          ls -lh CarWithin-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CarWithin-unsigned-ipa
+          path: build/CarWithin-unsigned.ipa
+          if-no-files-found: error
