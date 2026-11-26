@@ -221,6 +221,22 @@ final class PxcConnection: @unchecked Sendable {
             try checkSerialNumber(socket, request)
         case Command.heartbeat:
             try reply(socket, request.command, payload: Data())
+        case 0x10040, 0x10740:
+            // 仪表额外下发的控制命令（台铃实现里同样只回 +1 空应答）。
+            // NWF125 实测缺了这条会 11 秒后断开 10920，提示「台铃接收 TCP失败（54）」。
+            try reply(socket, request.command, payload: Data())
+        case 0x10450:
+            // 时间同步：仪表要当前时间与时区。
+            let time = Int64(Date().timeIntervalSince1970 * 1_000)
+            let payload = try TailingProtocol.json([
+                "time": time,
+                "currentTime": time + Int64(TimeZone.current.secondsFromGMT()) * 1_000,
+                "currentTimeZone": TimeZone.current.identifier
+            ])
+            try reply(socket, request.command, payload: payload)
+        case 0x80000010:
+            // 仪表表示"某项控制消息不支持"，属通知，不回。
+            log("\(dashboard) 仪表报告不支持某项控制消息")
         default:
             log(String(format: "\(dashboard) 控制通道未命名命令 0x%08x（%d 字节）",
                        request.command, request.payload.count))
