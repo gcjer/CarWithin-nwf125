@@ -138,6 +138,7 @@ final class CfmotoOutput {
                     encodeHeight = size.height
                     report("仪表已连接，等待 CarPlay 画面…")
                     var first = true
+                    var lastEncodedData: Data?
                     var nextFrame = ProcessInfo.processInfo.systemUptime
                     while active {
                         try connection.checkHealth()
@@ -153,7 +154,13 @@ final class CfmotoOutput {
                             return encode(image, at: ProcessInfo.processInfo.systemUptime, forceKeyframe: first)
                         }
                         guard let result else {
-                            // 仪表已经拉帧，这里保留请求，等一帧可编码画面用关键帧补上。
+                            // 编码失败（典型：App 切后台时 VideoToolbox 报 -12903 编码器故障）。
+                            // 仪表已经发过 114 在等帧，先重发上一帧保活，避免它等帧超时掐断 10920；
+                            // 然后再尝试重建编码器补一帧关键帧。仍失败就继续循环保活，不抛错断开。
+                            if let cached = lastEncodedData {
+                                try? connection.sendH264(cached)
+                                onLog("\(profile.label)编码失败，已重发上一帧保活")
+                            }
                             var recovered: H264EncodedFrame?
                             for _ in 0..<20 where active && recovered == nil {
                                 Thread.sleep(forTimeInterval: 0.05)
@@ -162,12 +169,15 @@ final class CfmotoOutput {
                                     return encode(image, at: ProcessInfo.processInfo.systemUptime, forceKeyframe: true)
                                 }
                             }
-                            guard let recovered else { throw TailingError.timeout("等待 H.264 编码画面") }
-                            try connection.sendH264(recovered.data)
-                            first = false
-                            report("正在投屏 · \(profile.title) · H.264")
+                            if let recovered {
+                                lastEncodedData = recovered.data
+                                try connection.sendH264(recovered.data)
+                                first = false
+                                report("正在投屏 · \(profile.title) · H.264")
+                            }
                             continue
                         }
+                        lastEncodedData = result.data
                         try connection.sendH264(result.data)
                         first = false
                         report("正在投屏 · \(profile.title) · H.264")

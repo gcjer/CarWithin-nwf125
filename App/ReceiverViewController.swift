@@ -2073,7 +2073,8 @@ extension ReceiverViewController {
         frameRateControl.selectedSegmentIndex = [0: 0, 30: 1, 60: 2][defaults.object(forKey: "displayMaxFPS") as? Int ?? 60] ?? 2
         codecControl.selectedSegmentIndex = ["auto": 0, "h264": 1, "h265": 2][defaults.string(forKey: "videoCodec") ?? "h264"] ?? 1
         let savedWidth = defaults.object(forKey: "widthPhysicalMM") as? Int ?? CarPlayInfo.defaultWidthPhysicalMM
-        iconSizeControl.selectedSegmentIndex = ReceiverConfiguration.iconSizes.firstIndex { $0.widthMM == savedWidth } ?? 1
+        iconSizeControl.selectedSegmentIndex = ReceiverConfiguration.iconSizes.firstIndex { $0.widthMM == savedWidth }
+            ?? ReceiverConfiguration.iconSizes.firstIndex { $0.widthMM == 125 } ?? 0
         nwf125SizeControl.selectedSegmentIndex = min(CfmotoProfile.nwf125Caps.count - 1,
             max(0, defaults.object(forKey: "nwf125CapIndex") as? Int ?? 0))
         performanceControl.selectedSegmentIndex = BrowserPerformance.allCases.firstIndex(of:

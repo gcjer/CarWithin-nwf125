@@ -50,7 +50,10 @@ struct ReceiverConfiguration {
     var oemIconLabel = "CarWithin"
 
     /// Choices for "CarPlay 图标大小", as declared screen widths (OpenXPlay offers the same four).
-    static let iconSizes: [(title: String, widthMM: Int)] = [(CWL("大"), 125), (CWL("默认"), 200), (CWL("较小"), 250), (CWL("最小"), 300)]
+    static let iconSizes: [(title: String, widthMM: Int)] = [
+        (CWL("超小"), 70), (CWL("更小"), 90), (CWL("小"), 110),
+        (CWL("大"), 125), (CWL("默认"), 200), (CWL("较小"), 250), (CWL("最小"), 300)
+    ]
 
     /// CarPlay day/night appearance. Raw values are persisted.
     enum Appearance: Int, CaseIterable {
@@ -143,7 +146,7 @@ struct ReceiverConfiguration {
         // at most 4K in area; the requested CarPlay frame rate is 30–60 in steps of 5.
         guard (320...3840).contains(width), (320...3840).contains(height), width % 2 == 0, height % 2 == 0,
               width * height <= 3840 * 2160,
-              (30...60).contains(maxFPS), maxFPS % 5 == 0, (100...400).contains(widthPhysicalMM) else {
+              (30...60).contains(maxFPS), maxFPS % 5 == 0, (60...400).contains(widthPhysicalMM) else {
             throw ConfigurationError(CWL("请选择受支持的分辨率和帧率。"))
         }
         if let carLifeAddress {
