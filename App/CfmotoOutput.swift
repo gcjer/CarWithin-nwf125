@@ -20,6 +20,21 @@ struct CfmotoProfile: Equatable {
     /// 实测该仪表显示缓冲上限约 432x528，超过（如 480x624）会黑屏，所以把回包尺寸限死。
     /// 注意 width/height 是**给 iOS 的 CarPlay 渲染尺寸**，必须是 VideoToolbox 硬解友好的
     /// 标准尺寸；实测 432 宽会让 iPhone 解码报 -12911，因此这里用 480x640（3:4 竖屏）。
+    /// NWF125 可选的 PXC 回包尺寸（App 内可调，用来找车机显示上限）。
+    static let nwf125Caps: [InstrumentFrameSize] = [
+        InstrumentFrameSize(width: 432, height: 528),
+        InstrumentFrameSize(width: 400, height: 512),
+        InstrumentFrameSize(width: 384, height: 480),
+        InstrumentFrameSize(width: 320, height: 416),
+        InstrumentFrameSize(width: 480, height: 624)
+    ]
+
+    /// CarPlay 侧固定 480×640（VideoToolbox 硬解友好），只让 PXC 回包尺寸可变。
+    static func nwf125(cap: InstrumentFrameSize) -> CfmotoProfile {
+        CfmotoProfile(width: 480, height: 640, fps: 30, bitrate: 2_500_000,
+                      label: "五羊本田 NWF125", sizeCap: cap)
+    }
+
     static let nwf125 = CfmotoProfile(width: 480, height: 640, fps: 30, bitrate: 2_500_000,
                                       label: "五羊本田 NWF125",
                                       sizeCap: InstrumentFrameSize(width: 432, height: 528))

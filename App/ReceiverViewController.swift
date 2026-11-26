@@ -92,6 +92,8 @@ final class ReceiverViewController: UIViewController, CLLocationManagerDelegate 
     /// 0 = follow the head unit's screen, 1 = the fixed resolution.
     private let sizeModeControl = ChoiceMenu(items: [CWL("跟随车机"), CWL("固定尺寸")])
     private let iconSizeControl = ChoiceMenu(items: ReceiverConfiguration.iconSizes.map { "\($0.title)（\($0.widthMM) mm）" })
+    /// NWF125 专用：PXC 回包尺寸（车机显示上限靠它试）。
+    private let nwf125SizeControl = ChoiceMenu(items: CfmotoProfile.nwf125Caps.map { "\($0.width)×\($0.height)" })
     private let autoRestartSwitch = UISwitch()
     private let performanceControl = ChoiceMenu(items: BrowserPerformance.allCases.map(\.title))
     private let showTouchesSwitch = UISwitch()
@@ -178,7 +180,10 @@ final class ReceiverViewController: UIViewController, CLLocationManagerDelegate 
         switch outputMode {
         case .cfmoto5: return .fiveInch
         case .cfmoto62: return .sixInch
-        case .nwf125: return .nwf125
+        case .nwf125:
+            let caps = CfmotoProfile.nwf125Caps
+            let index = min(caps.count - 1, max(0, nwf125SizeControl.selectedSegmentIndex))
+            return CfmotoProfile.nwf125(cap: caps[index])
         default: return nil
         }
     }
@@ -876,6 +881,7 @@ final class ReceiverViewController: UIViewController, CLLocationManagerDelegate 
         defaults.set(["auto", "h264", "h265"][max(0, codecControl.selectedSegmentIndex)], forKey: "videoCodec")
         defaults.set(sizeModeControl.selectedSegmentIndex, forKey: "displaySizeMode")
         defaults.set(ReceiverConfiguration.iconSizes[max(0, iconSizeControl.selectedSegmentIndex)].widthMM, forKey: "widthPhysicalMM")
+        defaults.set(nwf125SizeControl.selectedSegmentIndex, forKey: "nwf125CapIndex")
         defaults.set(selectedPerformance.rawValue, forKey: "browserPerformance")
         defaults.set(autoRestartSwitch.isOn, forKey: "autoRestart")
         defaults.set(showTouchesSwitch.isOn, forKey: "showTouches")
@@ -2068,12 +2074,15 @@ extension ReceiverViewController {
         codecControl.selectedSegmentIndex = ["auto": 0, "h264": 1, "h265": 2][defaults.string(forKey: "videoCodec") ?? "h264"] ?? 1
         let savedWidth = defaults.object(forKey: "widthPhysicalMM") as? Int ?? CarPlayInfo.defaultWidthPhysicalMM
         iconSizeControl.selectedSegmentIndex = ReceiverConfiguration.iconSizes.firstIndex { $0.widthMM == savedWidth } ?? 1
+        nwf125SizeControl.selectedSegmentIndex = min(CfmotoProfile.nwf125Caps.count - 1,
+            max(0, defaults.object(forKey: "nwf125CapIndex") as? Int ?? 0))
         performanceControl.selectedSegmentIndex = BrowserPerformance.allCases.firstIndex(of:
             BrowserPerformance(rawValue: defaults.string(forKey: "browserPerformance") ?? "") ?? .auto) ?? 0
         autoRestartSwitch.isOn = defaults.object(forKey: "autoRestart") as? Bool ?? false
         showTouchesSwitch.isOn = defaults.bool(forKey: "showTouches")
         carButtonSwitch.isOn = defaults.object(forKey: "carButton") as? Bool ?? true
         let displayControls: [UIControl] = [resolutionControl, aspectRatioControl, sizeModeControl, frameRateControl, codecControl, iconSizeControl,
+                                            nwf125SizeControl,
                                             performanceControl, autoRestartSwitch, showTouchesSwitch, carButtonSwitch]
         displayControls.forEach { $0.addTarget(self, action: #selector(displaySettingChanged), for: .valueChanged) }
         appearanceControl.selectedSegmentIndex = defaults.integer(forKey: "carPlayAppearance")
@@ -2457,6 +2466,18 @@ extension ReceiverViewController {
         page(CWL("画面")) { [unowned self] in
             if let cfmoto = cfmotoProfile {
                 let name = outputMode.title
+                if outputMode == .nwf125 {
+                    let caps = CfmotoProfile.nwf125Caps
+                    let cap = caps[min(caps.count - 1, max(0, nwf125SizeControl.selectedSegmentIndex))]
+                    return [
+                        SettingsSection(name, [.info(CWL("仪表画面"), "CarPlay \(cfmoto.width)×\(cfmoto.height) · 车机 \(cap.width)×\(cap.height) · H.264 · PXC(TCP) · \(cfmoto.fps) FPS")]),
+                        SettingsSection(CWL("PXC 输出"), [
+                            .control(CWL("车机回包尺寸"), icon: ("rectangle.expand.vertical", .systemTeal), nwf125SizeControl),
+                            .info(CWL("说明"), CWL("停止接收后修改生效；越大画面越满，超过车机上限会黑屏。"))
+                        ]),
+                        SettingsSection(CWL("图标"), [.control(CWL("CarPlay 图标大小"), icon: ("square.grid.2x2.fill", .systemPurple), iconSizeControl)])
+                    ]
+                }
                 return [
                     SettingsSection(name, [.info(CWL("仪表画面"), "\(cfmoto.width)×\(cfmoto.height) · H.264 · PXC(TCP) · \(cfmoto.fps) FPS")]),
                     SettingsSection(CWL("图标"), [.control(CWL("CarPlay 图标大小"), icon: ("square.grid.2x2.fill", .systemPurple), iconSizeControl)])
