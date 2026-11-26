@@ -94,6 +94,8 @@ final class ReceiverViewController: UIViewController, CLLocationManagerDelegate 
     private let iconSizeControl = ChoiceMenu(items: ReceiverConfiguration.iconSizes.map { "\($0.title)（\($0.widthMM) mm）" })
     /// NWF125 专用：PXC 回包尺寸（车机显示上限靠它试）。
     private let nwf125SizeControl = ChoiceMenu(items: CfmotoProfile.nwf125Caps.map { "\($0.width)×\($0.height)" })
+    /// NWF125 专用：CarPlay 渲染尺寸（越大图标越小、越完整）。
+    private let nwf125RenderControl = ChoiceMenu(items: CfmotoProfile.nwf125RenderSizes.map { "\($0.width)×\($0.height)" })
     private let autoRestartSwitch = UISwitch()
     private let performanceControl = ChoiceMenu(items: BrowserPerformance.allCases.map(\.title))
     private let showTouchesSwitch = UISwitch()
@@ -182,8 +184,10 @@ final class ReceiverViewController: UIViewController, CLLocationManagerDelegate 
         case .cfmoto62: return .sixInch
         case .nwf125:
             let caps = CfmotoProfile.nwf125Caps
-            let index = min(caps.count - 1, max(0, nwf125SizeControl.selectedSegmentIndex))
-            return CfmotoProfile.nwf125(cap: caps[index])
+            let capIndex = min(caps.count - 1, max(0, nwf125SizeControl.selectedSegmentIndex))
+            let renders = CfmotoProfile.nwf125RenderSizes
+            let renderIndex = min(renders.count - 1, max(0, nwf125RenderControl.selectedSegmentIndex))
+            return CfmotoProfile.nwf125(cap: caps[capIndex], render: renders[renderIndex])
         default: return nil
         }
     }
@@ -882,6 +886,7 @@ final class ReceiverViewController: UIViewController, CLLocationManagerDelegate 
         defaults.set(sizeModeControl.selectedSegmentIndex, forKey: "displaySizeMode")
         defaults.set(ReceiverConfiguration.iconSizes[max(0, iconSizeControl.selectedSegmentIndex)].widthMM, forKey: "widthPhysicalMM")
         defaults.set(nwf125SizeControl.selectedSegmentIndex, forKey: "nwf125CapIndex")
+        defaults.set(nwf125RenderControl.selectedSegmentIndex, forKey: "nwf125RenderIndex")
         defaults.set(selectedPerformance.rawValue, forKey: "browserPerformance")
         defaults.set(autoRestartSwitch.isOn, forKey: "autoRestart")
         defaults.set(showTouchesSwitch.isOn, forKey: "showTouches")
@@ -2077,13 +2082,15 @@ extension ReceiverViewController {
             ?? ReceiverConfiguration.iconSizes.firstIndex { $0.widthMM == 125 } ?? 0
         nwf125SizeControl.selectedSegmentIndex = min(CfmotoProfile.nwf125Caps.count - 1,
             max(0, defaults.object(forKey: "nwf125CapIndex") as? Int ?? 0))
+        nwf125RenderControl.selectedSegmentIndex = min(CfmotoProfile.nwf125RenderSizes.count - 1,
+            max(0, defaults.object(forKey: "nwf125RenderIndex") as? Int ?? 0))
         performanceControl.selectedSegmentIndex = BrowserPerformance.allCases.firstIndex(of:
             BrowserPerformance(rawValue: defaults.string(forKey: "browserPerformance") ?? "") ?? .auto) ?? 0
         autoRestartSwitch.isOn = defaults.object(forKey: "autoRestart") as? Bool ?? false
         showTouchesSwitch.isOn = defaults.bool(forKey: "showTouches")
         carButtonSwitch.isOn = defaults.object(forKey: "carButton") as? Bool ?? true
         let displayControls: [UIControl] = [resolutionControl, aspectRatioControl, sizeModeControl, frameRateControl, codecControl, iconSizeControl,
-                                            nwf125SizeControl,
+                                            nwf125SizeControl, nwf125RenderControl,
                                             performanceControl, autoRestartSwitch, showTouchesSwitch, carButtonSwitch]
         displayControls.forEach { $0.addTarget(self, action: #selector(displaySettingChanged), for: .valueChanged) }
         appearanceControl.selectedSegmentIndex = defaults.integer(forKey: "carPlayAppearance")
@@ -2475,6 +2482,10 @@ extension ReceiverViewController {
                         SettingsSection(CWL("PXC 输出"), [
                             .control(CWL("车机回包尺寸"), icon: ("rectangle.expand.vertical", .systemTeal), nwf125SizeControl),
                             .info(CWL("说明"), CWL("停止接收后修改生效；越大画面越满，超过车机上限会黑屏。"))
+                        ]),
+                        SettingsSection(CWL("CarPlay 渲染"), [
+                            .control(CWL("渲染尺寸"), icon: ("rectangle.on.rectangle", .systemIndigo), nwf125RenderControl),
+                            .info(CWL("说明"), CWL("越大 CarPlay 认为屏幕越大，图标越小越完整；仪表实际显示尺寸不受影响。"))
                         ]),
                         SettingsSection(CWL("图标"), [.control(CWL("CarPlay 图标大小"), icon: ("square.grid.2x2.fill", .systemPurple), iconSizeControl)])
                     ]

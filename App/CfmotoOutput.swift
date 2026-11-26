@@ -29,10 +29,19 @@ struct CfmotoProfile: Equatable {
         InstrumentFrameSize(width: 480, height: 624)
     ]
 
-    /// CarPlay 侧固定 480×640（VideoToolbox 硬解友好），只让 PXC 回包尺寸可变。
-    static func nwf125(cap: InstrumentFrameSize) -> CfmotoProfile {
-        CfmotoProfile(width: 480, height: 640, fps: 30, bitrate: 2_500_000,
-                      label: "五羊本田 NWF125", sizeCap: cap)
+    /// NWF125 可选的 CarPlay 渲染尺寸（决定 CarPlay 认为屏幕多大 → 影响图标密度；
+    /// 不影响真正发给仪表的尺寸，那由 sizeCap 决定）。
+    static let nwf125RenderSizes: [InstrumentFrameSize] = [
+        InstrumentFrameSize(width: 480, height: 640),
+        InstrumentFrameSize(width: 640, height: 854),
+        InstrumentFrameSize(width: 800, height: 1066)
+    ]
+
+    /// CarPlay 侧用 render（决定 UI 密度），PXC 回包用 cap（决定仪表显示尺寸）。
+    static func nwf125(cap: InstrumentFrameSize, render: InstrumentFrameSize) -> CfmotoProfile {
+        let bitrate = render.width * render.height > 640 * 854 ? 5_000_000 : 3_000_000
+        return CfmotoProfile(width: render.width, height: render.height, fps: 30, bitrate: bitrate,
+                             label: "五羊本田 NWF125", sizeCap: cap)
     }
 
     static let nwf125 = CfmotoProfile(width: 480, height: 640, fps: 30, bitrate: 2_500_000,
