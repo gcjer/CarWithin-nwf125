@@ -3,9 +3,11 @@ on: workflow_dispatch
 jobs:
   probe:
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14]
+        os: [macos-13, macos-latest, macos-15]
     runs-on: ${{ matrix.os }}
+    continue-on-error: true
     steps:
       - run: echo "runner ok on ${{ matrix.os }}"
-      - run: uname -a
+      - run: sw_vers
