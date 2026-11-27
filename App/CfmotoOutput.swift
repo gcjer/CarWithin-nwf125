@@ -162,8 +162,13 @@ final class CfmotoOutput {
                         nextFrame = ProcessInfo.processInfo.systemUptime + 1.0 / Double(profile.fps)
                         guard active else { break }
                         let result = queue.sync { () -> H264EncodedFrame? in
-                            guard active, let image = latest else { return nil }
-                            return encode(image, at: ProcessInfo.processInfo.systemUptime, forceKeyframe: first)
+                            // 关键：这个循环跑在 DispatchQueue.global 的闭包里，没有 runloop，
+                            // 不包 autoreleasepool 的话每帧的 CIImage / CIContext 中间对象不会释放，
+                            // 几分钟后内存涨到 jetsam 阈值，进程被系统杀掉（息屏时更容易触发）。
+                            return autoreleasepool {
+                                guard active, let image = latest else { return nil }
+                                return encode(image, at: ProcessInfo.processInfo.systemUptime, forceKeyframe: first)
+                            }
                         }
                         guard let result else {
                             // 编码失败（典型：App 切后台时 VideoToolbox 报 -12903 编码器故障）。
