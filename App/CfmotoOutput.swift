@@ -117,6 +117,9 @@ final class CfmotoOutput {
         private var waitingForIDR = true
         private var latest: CVPixelBuffer?
         private lazy var compositor = CIContext(options: [.useSoftwareRenderer: true, .cacheIntermediates: false])
+        private var scalerPool: CVPixelBufferPool?
+        private var scalerPoolWidth = 0
+        private var scalerPoolHeight = 0
         private var lastKeyframe = -Double.infinity
         private var lastCodecFailure = -Double.infinity
         private var status = ""
@@ -311,11 +314,28 @@ final class CfmotoOutput {
         private func fittedImage(_ image: CVPixelBuffer) throws -> CVPixelBuffer {
             let width = encodeWidth, height = encodeHeight
             if CVPixelBufferGetWidth(image) == width, CVPixelBufferGetHeight(image) == height { return image }
-            var buffer: CVPixelBuffer?
-            let status = CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_32BGRA,
-                                             [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buffer)
-            guard status == kCVReturnSuccess, let buffer else {
-                throw ConfigurationError("无法分配\(profile.label)缩放画面（\(status)）")
+            // 用 CVPixelBufferPool 复用缩放缓冲：每帧 CVPixelBufferCreate 会让 IOSurface
+            // 数量在几分钟内累积到系统上限，息屏后被 jetsam 杀掉进程。
+            if scalerPool == nil || scalerPoolWidth != width || scalerPoolHeight != height {
+                let attrs: [CFString: Any] = [
+                    kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
+                    kCVPixelBufferWidthKey: width,
+                    kCVPixelBufferHeightKey: height,
+                    kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary
+                ]
+                var pool: CVPixelBufferPool?
+                let poolAttrs = [kCVPixelBufferPoolMinimumBufferCountKey: 3] as CFDictionary
+                CVPixelBufferPoolCreate(kCFAllocatorDefault, poolAttrs, attrs as CFDictionary, &pool)
+                scalerPool = pool
+                scalerPoolWidth = width
+                scalerPoolHeight = height
+            }
+            var optionalBuffer: CVPixelBuffer?
+            if let pool = scalerPool {
+                CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &optionalBuffer)
+            }
+            guard let buffer = optionalBuffer else {
+                throw ConfigurationError("无法分配\(profile.label)缩放画面")
             }
             let source = CIImage(cvPixelBuffer: image)
             let scale = min(CGFloat(width) / source.extent.width, CGFloat(height) / source.extent.height)
